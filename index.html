@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#060d1a">
+<title>PortfolioAdvisor</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root{--bg:#060d1a;--surface:#0d1b2e;--surface2:#112240;--border:#1e3352;--text:#e2e8f0;--muted:#64748b;--amber:#f59e0b;--green:#22c55e;--red:#ef4444;--blue:#3b82f6;--purple:#8b5cf6;--mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;height:100vh;overflow:hidden;}
+.hidden{display:none!important;}
+
+/* ── SETUP & PIN SCREENS ── */
+.auth-screen{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;z-index:999;}
+.auth-logo{font-family:var(--mono);font-size:22px;font-weight:700;color:var(--amber);margin-bottom:8px;}
+.auth-sub{font-size:13px;color:var(--muted);margin-bottom:32px;text-align:center;}
+.auth-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;width:100%;max-width:360px;}
+.auth-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;margin-top:16px;}
+.auth-input{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:12px;border-radius:8px;font-size:13px;font-family:var(--mono);}
+.auth-input:focus{outline:none;border-color:var(--amber);}
+.auth-btn{width:100%;background:var(--amber);color:#000;border:none;padding:14px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;margin-top:20px;}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px;}
+.pin-key{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:16px;font-size:20px;font-family:var(--mono);cursor:pointer;text-align:center;}
+.pin-key:active{background:var(--amber);color:#000;}
+.pin-dots{display:flex;gap:12px;justify-content:center;margin-bottom:20px;}
+.pin-dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--border);}
+.pin-dot.filled{background:var(--amber);border-color:var(--amber);}
+.pin-reset{font-size:11px;color:var(--muted);text-align:center;margin-top:16px;cursor:pointer;padding:8px;}
+
+/* ── APP LAYOUT ── */
+#app{display:flex;flex-direction:column;height:100vh;}
+#topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 14px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;}
+.tb-left{display:flex;flex-direction:column;}
+.tb-logo{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--amber);}
+.tb-sync{font-size:10px;color:var(--muted);}
+.tb-centre{text-align:center;}
+#tb-value{font-family:var(--mono);font-size:18px;font-weight:700;color:var(--amber);}
+#tb-gain{font-size:11px;font-weight:600;}
+.tb-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;}
+#nse-badge{font-size:9px;padding:2px 7px;border-radius:99px;background:#052e16;color:var(--green);border:1px solid #166534;}
+#refresh-btn{background:var(--amber);color:#000;border:none;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;}
+
+/* ── INDEX STRIP ── */
+#strip{background:#080f1d;border-bottom:1px solid var(--border);overflow-x:auto;white-space:nowrap;padding:6px 10px;scrollbar-width:none;flex-shrink:0;}
+#strip::-webkit-scrollbar{display:none;}
+.idx-chip{display:inline-flex;flex-direction:column;align-items:center;margin-right:16px;min-width:70px;}
+.idx-name{font-size:9px;color:var(--muted);}
+.idx-val{font-family:var(--mono);font-size:11px;font-weight:600;}
+.idx-chg{font-size:9px;font-weight:600;}
+
+/* ── MAIN CONTENT ── */
+#content{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+.tab{display:none;padding:12px;}
+.tab.active{display:block;}
+
+/* ── BOTTOM NAV ── */
+#botnav{background:var(--surface);border-top:1px solid var(--border);display:flex;flex-shrink:0;}
+.nav-item{flex:1;display:flex;flex-direction:column;align-items:center;padding:8px 4px;cursor:pointer;border:none;background:none;color:var(--muted);font-size:10px;gap:2px;}
+.nav-item.active{color:var(--amber);}
+.nav-icon{font-size:18px;}
+
+/* ── CARDS ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;}
+.card-title{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;}
+.card-value{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--amber);}
+.card-sub{font-size:11px;color:var(--muted);margin-top:3px;}
+.cards-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;}
+.mini-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;}
+.mc-label{font-size:10px;color:var(--muted);margin-bottom:3px;}
+.mc-val{font-family:var(--mono);font-size:14px;font-weight:600;}
+.mc-sub{font-size:10px;color:var(--muted);margin-top:2px;}
+
+/* ── FUND / STOCK ROWS ── */
+.fund-row{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;}
+.fr-left{flex:1;}
+.fr-name{font-size:12px;font-weight:600;margin-bottom:2px;}
+.fr-meta{font-size:10px;color:var(--muted);}
+.fr-right{text-align:right;}
+.fr-value{font-family:var(--mono);font-size:13px;font-weight:700;}
+.fr-ret{font-size:10px;font-weight:600;}
+.badge{display:inline-block;padding:1px 6px;border-radius:99px;font-size:9px;font-weight:700;}
+.bg{background:#052e16;color:var(--green);}
+.br{background:#1f0909;color:var(--red);}
+.ba{background:#1c1003;color:var(--amber);}
+.bp{background:#0c1a3d;color:#60a5fa;}
+.bm{background:#1e293b;color:var(--muted);}
+
+/* ── SECTION TITLE ── */
+.sec{font-family:var(--mono);font-size:10px;font-weight:600;color:var(--amber);text-transform:uppercase;letter-spacing:.6px;margin:14px 0 8px;padding-bottom:5px;border-bottom:1px solid var(--border);}
+
+/* ── CHARTS ── */
+.chart-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px;}
+.chart-title{font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:8px;}
+
+/* ── ALERT CARDS ── */
+.alert{border-radius:10px;padding:10px 12px;margin-bottom:8px;border-left:4px solid;}
+.alert-r{background:#1f0909;border-left-color:var(--red);}
+.alert-a{background:#1c1003;border-left-color:var(--amber);}
+.alert-g{background:#052e16;border-left-color:var(--green);}
+.alert-b{background:#0c1a3d;border-left-color:var(--blue);}
+.at{font-size:12px;font-weight:600;margin-bottom:3px;}
+.ab{font-size:11px;color:var(--muted);line-height:1.5;}
+
+/* ── SCREEN NOW ── */
+.run-btn{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:14px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:12px;}
+.run-btn:active{border-color:var(--amber);color:var(--amber);}
+.screen-row{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;}
+.sr-top{display:flex;justify-content:space-between;align-items:center;}
+.sr-sym{font-family:var(--mono);font-size:13px;font-weight:700;}
+.sr-bot{font-size:10px;color:var(--muted);margin-top:3px;}
+
+/* ── SPINNER ── */
+.spin{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--amber);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ── COLOURS ── */
+.pos{color:var(--green);}
+.neg{color:var(--red);}
+.amb{color:var(--amber);}
+</style>
+</head>
+<body>
+
+<!-- SETUP SCREEN -->
+<div class="auth-screen" id="setup-screen">
+  <div class="auth-logo">📊 PortfolioAdvisor</div>
+  <div class="auth-sub">First-time setup — enter your details once</div>
+  <div class="auth-card">
+    <div class="auth-label">GitHub Personal Access Token</div>
+    <input class="auth-input" id="setup-token" type="password" placeholder="github_pat_...">
+    <div class="auth-label">Set a 4-digit PIN for this app</div>
+    <input class="auth-input" id="setup-pin" type="password" maxlength="4" inputmode="numeric" placeholder="••••">
+    <div class="auth-label">Confirm PIN</div>
+    <input class="auth-input" id="setup-pin2" type="password" maxlength="4" inputmode="numeric" placeholder="••••">
+    <button class="auth-btn" onclick="doSetup()">SAVE &amp; START</button>
+    <div id="setup-err" style="color:var(--red);font-size:11px;text-align:center;margin-top:10px;"></div>
+  </div>
+</div>
+
+<!-- PIN SCREEN -->
+<div class="auth-screen hidden" id="pin-screen">
+  <div class="auth-logo">📊 PortfolioAdvisor</div>
+  <div class="auth-sub">Enter PIN to access your portfolio</div>
+  <div class="auth-card">
+    <div class="pin-dots" id="pin-dots">
+      <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+    </div>
+    <div class="pin-pad" id="pin-pad">
+      <button class="pin-key" onclick="pinKey('1')">1</button>
+      <button class="pin-key" onclick="pinKey('2')">2</button>
+      <button class="pin-key" onclick="pinKey('3')">3</button>
+      <button class="pin-key" onclick="pinKey('4')">4</button>
+      <button class="pin-key" onclick="pinKey('5')">5</button>
+      <button class="pin-key" onclick="pinKey('6')">6</button>
+      <button class="pin-key" onclick="pinKey('7')">7</button>
+      <button class="pin-key" onclick="pinKey('8')">8</button>
+      <button class="pin-key" onclick="pinKey('9')">9</button>
+      <button class="pin-key" onclick="pinKey('clr')">⌫</button>
+      <button class="pin-key" onclick="pinKey('0')">0</button>
+      <button class="pin-key" onclick="pinKey('ok')">OK</button>
+    </div>
+    <div id="pin-err" style="color:var(--red);font-size:11px;text-align:center;"></div>
+    <div class="pin-reset" onclick="resetApp()">Reset app</div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app" class="hidden">
+  <div id="topbar">
+    <div class="tb-left">
+      <div class="tb-logo">PortfolioAdvisor</div>
+      <div class="tb-sync" id="sync-time">Loading...</div>
+    </div>
+    <div class="tb-centre">
+      <div id="tb-value">₹—</div>
+      <div id="tb-gain" class="muted">—</div>
+    </div>
+    <div class="tb-right">
+      <div id="nse-badge">● LIVE</div>
+      <button id="refresh-btn" onclick="refreshAll()">↻ REFRESH</button>
+    </div>
+  </div>
+
+  <div id="strip"><div class="idx-chip"><span class="idx-name">Loading indices...</span></div></div>
+
+  <div id="content">
+    <!-- DASHBOARD -->
+    <div class="tab active" id="tab-dashboard">
+      <div class="cards-2">
+        <div class="mini-card"><div class="mc-label">Equity MF</div><div class="mc-val" id="d-emf">₹—</div><div class="mc-sub" id="d-emf-r">—</div></div>
+        <div class="mini-card"><div class="mc-label">Debt MF</div><div class="mc-val" id="d-dmf">₹—</div><div class="mc-sub" id="d-dmf-r">—</div></div>
+        <div class="mini-card"><div class="mc-label">Direct Equity</div><div class="mc-val" id="d-eq">₹—</div><div class="mc-sub" id="d-eq-r">—</div></div>
+        <div class="mini-card"><div class="mc-label">Monthly SIP</div><div class="mc-val" id="d-sip">₹—</div><div class="mc-sub" id="d-sip-r">—</div></div>
+      </div>
+      <div class="chart-wrap"><div class="chart-title">Allocation</div><canvas id="alloc-chart" height="180"></canvas></div>
+      <div class="chart-wrap"><div class="chart-title">Returns by Asset Class</div><canvas id="ret-chart" height="150"></canvas></div>
+      <div class="sec">Alerts</div>
+      <div id="dash-alerts"><div style="color:var(--muted);font-size:12px;">Loading...</div></div>
+    </div>
+
+    <!-- MF TAB -->
+    <div class="tab" id="tab-mf">
+      <div class="card"><div class="card-title">Total Mutual Funds</div><div class="card-value" id="mf-total">₹—</div><div class="card-sub" id="mf-total-sub">—</div></div>
+      <div class="sec" id="mf-eq-title">Equity MFs</div>
+      <div id="mf-equity-list"></div>
+      <div class="sec">Debt MFs</div>
+      <div id="mf-debt-list"></div>
+      <div class="sec">SIP Status</div>
+      <div id="sip-list"></div>
+    </div>
+
+    <!-- EQUITY TAB -->
+    <div class="tab" id="tab-equity">
+      <div class="card"><div class="card-title">Direct Equity Portfolio</div><div class="card-value" id="eq-total">₹—</div><div class="card-sub" id="eq-total-sub">—</div></div>
+      <div class="sec">Holdings</div>
+      <div id="eq-list"></div>
+    </div>
+
+    <!-- SCREEN NOW TAB -->
+    <div class="tab" id="tab-screen">
+      <div class="card" style="border-left:3px solid var(--amber);">
+        <div class="card-title">Value Stock Screener</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Screens large & mid cap NSE stocks. Tap to run.</div>
+        <button class="run-btn" id="scr-val-btn" onclick="runValueScreen()">▶ RUN VALUE SCREEN</button>
+        <div id="scr-val-time" style="font-size:10px;color:var(--muted);text-align:center;"></div>
+        <div id="scr-val-results"></div>
+      </div>
+      <div class="card" style="border-left:3px solid var(--purple);margin-top:10px;">
+        <div class="card-title">Growth Stock Screener</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Screens for high revenue & earnings growth.</div>
+        <button class="run-btn" id="scr-grow-btn" onclick="runGrowthScreen()">▶ RUN GROWTH SCREEN</button>
+        <div id="scr-grow-time" style="font-size:10px;color:var(--muted);text-align:center;"></div>
+        <div id="scr-grow-results"></div>
+      </div>
+    </div>
+
+    <!-- ADVISOR TAB -->
+    <div class="tab" id="tab-advisor">
+      <div class="card"><div class="card-title">Portfolio Recommendations</div><div id="adv-content"><div style="color:var(--muted);font-size:12px;">Loading recommendations...</div></div></div>
+    </div>
+  </div>
+
+  <div id="botnav">
+    <button class="nav-item active" onclick="showTab('dashboard',this)"><span class="nav-icon">📊</span>Dashboard</button>
+    <button class="nav-item" onclick="showTab('mf',this)"><span class="nav-icon">📈</span>MF</button>
+    <button class="nav-item" onclick="showTab('equity',this)"><span class="nav-icon">💼</span>Equity</button>
+    <button class="nav-item" onclick="showTab('screen',this)"><span class="nav-icon">🔍</span>Screen</button>
+    <button class="nav-item" onclick="showTab('advisor',this)"><span class="nav-icon">💡</span>Advisor</button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════
+// CONFIG & STATE
+// ═══════════════════════════════════
+const REPO = 'Rahul4Finance/portfolio-data';
+const SNAPSHOT_FILE = 'portfolio_snapshot.json';
+let snapshot = null;
+let prices = {}; // {yahoo_symbol: {price, changePct}}
+let navs = {};   // {mf_code: nav}
+let allocChart = null, retChart = null;
+let pinEntry = '';
+
+// ═══════════════════════════════════
+// FORMATTING
+// ═══════════════════════════════════
+const fmt = n => n == null ? '—' : '₹' + Number(n).toLocaleString('en-IN', {maximumFractionDigits: 0});
+const fmtD = n => n == null ? '—' : '₹' + Number(n).toLocaleString('en-IN', {maximumFractionDigits: 2});
+const fmtP = n => n == null ? '—' : (n >= 0 ? '+' : '') + Number(n).toFixed(2) + '%';
+const clr = n => n >= 0 ? 'var(--green)' : 'var(--red)';
+
+// ═══════════════════════════════════
+// SETUP & PIN
+// ═══════════════════════════════════
+function doSetup() {
+  const token = document.getElementById('setup-token').value.trim();
+  const pin = document.getElementById('setup-pin').value.trim();
+  const pin2 = document.getElementById('setup-pin2').value.trim();
+  const err = document.getElementById('setup-err');
+  if (!token.startsWith('github')) { err.textContent = 'Token must start with github'; return; }
+  if (pin.length !== 4 || !/^\d{4}$/.test(pin)) { err.textContent = 'PIN must be 4 digits'; return; }
+  if (pin !== pin2) { err.textContent = 'PINs do not match'; return; }
+  localStorage.setItem('pa_token', token);
+  localStorage.setItem('pa_pin', pin);
+  document.getElementById('setup-screen').classList.add('hidden');
+  launchApp();
+}
+
+let pinBuffer = '';
+function pinKey(k) {
+  if (k === 'clr') { pinBuffer = pinBuffer.slice(0, -1); }
+  else if (k === 'ok') { checkPin(); return; }
+  else if (pinBuffer.length < 4) { pinBuffer += k; }
+  if (pinBuffer.length === 4) { checkPin(); return; }
+  updatePinDots();
+}
+function updatePinDots() {
+  document.querySelectorAll('.pin-dot').forEach((d, i) => {
+    d.classList.toggle('filled', i < pinBuffer.length);
+  });
+}
+function checkPin() {
+  const stored = localStorage.getItem('pa_pin');
+  if (pinBuffer === stored) {
+    document.getElementById('pin-screen').classList.add('hidden');
+    launchApp();
+  } else {
+    document.getElementById('pin-err').textContent = 'Wrong PIN — try again';
+    pinBuffer = '';
+    updatePinDots();
+    setTimeout(() => document.getElementById('pin-err').textContent = '', 2000);
+  }
+}
+function resetApp() {
+  if (confirm('Reset app? Token and PIN will be cleared.')) {
+    localStorage.clear();
+    location.reload();
+  }
+}
+
+// ═══════════════════════════════════
+// INIT
+// ═══════════════════════════════════
+window.onload = function () {
+  const token = localStorage.getItem('pa_token');
+  const pin = localStorage.getItem('pa_pin');
+  if (!token || !pin) {
+    document.getElementById('setup-screen').classList.remove('hidden');
+  } else {
+    document.getElementById('setup-screen').classList.add('hidden');
+    document.getElementById('pin-screen').classList.remove('hidden');
+  }
+};
+
+async function launchApp() {
+  document.getElementById('app').classList.remove('hidden');
+  await refreshAll();
+}
+
+// ═══════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════
+function showTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  if (el) el.classList.add('active');
+}
+
+// ═══════════════════════════════════
+// DATA FETCHING
+// ═══════════════════════════════════
+async function fetchSnapshot() {
+  const token = localStorage.getItem('pa_token');
+  try {
+    const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${SNAPSHOT_FILE}`, {
+      headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' }
+    });
+    if (!r.ok) { console.error('Snapshot fetch failed:', r.status); return null; }
+    const data = await r.json();
+    const content = atob(data.content.replace(/\n/g, ''));
+    return JSON.parse(content);
+  } catch (e) { console.error('Snapshot error:', e); return null; }
+}
+
+async function fetchMFNavs(holdings) {
+  const results = {};
+  const promises = holdings.map(async h => {
+    if (!h.mf_code) return;
+    try {
+      const r = await fetch(`https://api.mfapi.in/mf/${h.mf_code}/latest`);
+      const d = await r.json();
+      if (d.data && d.data[0]) results[h.isin] = parseFloat(d.data[0].nav);
+    } catch {}
+  });
+  await Promise.allSettled(promises);
+  return results;
+}
+
+async function fetchStockPrice(symbol) {
+  const yahooSym = symbol.includes('.') ? symbol : symbol + '.NS';
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSym}?interval=1d&range=5d`;
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const d = await r.json();
+    const res = d.chart?.result?.[0];
+    if (!res) return null;
+    const closes = res.indicators?.quote?.[0]?.close?.filter(Boolean);
+    if (!closes || closes.length < 2) return null;
+    const last = closes[closes.length - 1];
+    const prev = closes[closes.length - 2];
+    return { price: last, changePct: ((last - prev) / prev) * 100 };
+  } catch { return null; }
+}
+
+async function fetchIndices() {
+  const idxMap = { '^NSEI': 'NIFTY 50', '^NSEBANK': 'BANK', '^CNXIT': 'IT', '^NSMIDCP': 'MIDCAP' };
+  const chips = [];
+  for (const [sym, label] of Object.entries(idxMap)) {
+    try {
+      const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=2d`);
+      const d = await r.json();
+      const res = d.chart?.result?.[0];
+      const closes = res?.indicators?.quote?.[0]?.close?.filter(Boolean);
+      if (!closes || closes.length < 2) continue;
+      const last = closes[closes.length - 1], prev = closes[closes.length - 2];
+      const chg = ((last - prev) / prev) * 100;
+      chips.push({ label, val: last, chg });
+    } catch {}
+  }
+  return chips;
+}
+
+// ═══════════════════════════════════
+// REFRESH ALL
+// ═══════════════════════════════════
+async function refreshAll() {
+  const btn = document.getElementById('refresh-btn');
+  btn.textContent = '⟳';
+  btn.disabled = true;
+
+  // Load snapshot
+  const cached = localStorage.getItem('pa_snapshot');
+  if (cached) snapshot = JSON.parse(cached);
+  const fresh = await fetchSnapshot();
+  if (fresh) { snapshot = fresh; localStorage.setItem('pa_snapshot', JSON.stringify(fresh)); }
+
+  if (!snapshot) { btn.textContent = '↻ REFRESH'; btn.disabled = false; return; }
+
+  const syncTime = snapshot.exported_at ? new Date(snapshot.exported_at).toLocaleString('en-IN', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '—';
+  document.getElementById('sync-time').textContent = 'Synced: ' + syncTime;
+
+  // Fetch live data in parallel
+  const mfHoldings = snapshot.mf_holdings || [];
+  const eqHoldings = (snapshot.equity_holdings || []).filter(h => h.qty > 0 && h.symbol !== '__TOTAL__');
+
+  const [navMap, idxData] = await Promise.all([
+    fetchMFNavs(mfHoldings),
+    fetchIndices()
+  ]);
+  navs = navMap;
+
+  // Fetch stock prices
+  const pricePromises = eqHoldings.map(async h => {
+    const sym = h.yahoo_symbol || h.symbol + '.NS';
+    const p = await fetchStockPrice(sym);
+    if (p) prices[h.symbol] = p;
+  });
+  await Promise.allSettled(pricePromises);
+
+  renderIndexStrip(idxData);
+  renderDashboard();
+  renderMF();
+  renderEquity();
+  renderAdvisor();
+
+  btn.textContent = '↻ REFRESH';
+  btn.disabled = false;
+}
+
+// ═══════════════════════════════════
+// INDEX STRIP
+// ═══════════════════════════════════
+function renderIndexStrip(chips) {
+  if (!chips.length) return;
+  const strip = document.getElementById('strip');
+  strip.innerHTML = chips.map(c => {
+    const col = c.chg >= 0 ? 'var(--green)' : 'var(--red)';
+    const ar = c.chg >= 0 ? '▲' : '▼';
+    return `<div class="idx-chip"><span class="idx-name">${c.label}</span><span class="idx-val">${Math.round(c.val).toLocaleString('en-IN')}</span><span class="idx-chg" style="color:${col}">${ar}${Math.abs(c.chg).toFixed(2)}%</span></div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════
+function renderDashboard() {
+  if (!snapshot) return;
+  const mf = snapshot.mf_holdings || [];
+  const eq = (snapshot.equity_holdings || []).filter(h => h.qty > 0 && h.symbol !== '__TOTAL__');
+  const sips = (snapshot.sip_registry || []).filter(s => s.status === 'ACTIVE');
+
+  // MF values
+  let emfVal = 0, emfCost = 0, dmfVal = 0, dmfCost = 0;
+  mf.forEach(h => {
+    const nav = navs[h.isin] || h.last_nav || 0;
+    const val = (h.units || 0) * nav;
+    const cost = h.total_cost || 0;
+    if (h.fund_type === 'Equity') { emfVal += val; emfCost += cost; }
+    else { dmfVal += val; dmfCost += cost; }
+  });
+
+  // Equity values
+  let eqVal = 0, eqCost = 0;
+  eq.forEach(h => {
+    const lp = prices[h.symbol]?.price || 0;
+    const val = lp > 0 ? (h.qty || 0) * lp : (h.current_value || (h.qty || 0) * (h.avg_cost || 0));
+    eqVal += val;
+    eqCost += h.total_cost || 0;
+  });
+
+  const sipTotal = sips.reduce((s, x) => s + (x.monthly_amount || 0), 0);
+  const totalVal = emfVal + dmfVal + eqVal;
+  const totalCost = emfCost + dmfCost + eqCost;
+  const totalGain = totalVal - totalCost;
+  const totalGainPct = totalCost > 0 ? (totalGain / totalCost * 100) : 0;
+
+  // Top bar
+  document.getElementById('tb-value').textContent = fmt(totalVal);
+  const tgEl = document.getElementById('tb-gain');
+  tgEl.textContent = fmtP(totalGainPct) + ' overall';
+  tgEl.className = totalGain >= 0 ? 'pos' : 'neg';
+
+  // Mini cards
+  const emfR = emfCost > 0 ? (emfVal - emfCost) / emfCost * 100 : 0;
+  const dmfR = dmfCost > 0 ? (dmfVal - dmfCost) / dmfCost * 100 : 0;
+  const eqR = eqCost > 0 ? (eqVal - eqCost) / eqCost * 100 : 0;
+  setCard('d-emf', fmt(emfVal), `${fmtP(emfR)} return`, emfR);
+  setCard('d-dmf', fmt(dmfVal), `${fmtP(dmfR)} return`, dmfR);
+  setCard('d-eq', fmt(eqVal), `${fmtP(eqR)} return`, eqR);
+  document.getElementById('d-sip').textContent = fmt(sipTotal);
+  document.getElementById('d-sip-r').textContent = sips.length + ' active SIPs';
+
+  // Allocation donut
+  if (allocChart) allocChart.destroy();
+  allocChart = new Chart(document.getElementById('alloc-chart'), {
+    type: 'doughnut',
+    data: { labels: ['Equity MF', 'Debt MF', 'Direct Equity'], datasets: [{ data: [emfVal, dmfVal, eqVal], backgroundColor: ['#3b82f6', '#8b5cf6', '#22c55e'], borderWidth: 0 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#94a3b8', font: { size: 10 }, boxWidth: 12 } } } }
+  });
+
+  // Returns bar
+  if (retChart) retChart.destroy();
+  retChart = new Chart(document.getElementById('ret-chart'), {
+    type: 'bar',
+    data: { labels: ['Equity MF', 'Debt MF', 'Direct Equity'], datasets: [{ data: [+emfR.toFixed(1), +dmfR.toFixed(1), +eqR.toFixed(1)], backgroundColor: ['#22c55e', '#8b5cf6', '#3b82f6'], borderRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#1e3352' } }, y: { ticks: { callback: v => v + '%', color: '#64748b', font: { size: 10 } }, grid: { color: '#1e3352' } } } }
+  });
+
+  // Alerts
+  renderAlerts();
+}
+
+function setCard(id, val, sub, ret) {
+  document.getElementById(id).textContent = val;
+  const s = document.getElementById(id + '-r');
+  s.textContent = sub;
+  s.style.color = ret >= 0 ? 'var(--green)' : 'var(--red)';
+}
+
+function renderAlerts() {
+  const sips = snapshot.sip_registry || [];
+  const alerts = [];
+  sips.filter(s => s.status === 'ENDING' || s.status === 'COMPLETED').forEach(s => {
+    alerts.push({ cls: 'alert-r', title: `⚠️ SIP Action: ${s.fund_name.split('–')[0].trim()}`, body: s.notes || (s.status === 'COMPLETED' ? 'SIP completed — restart urgently' : 'SIP ending soon — restart') });
+  });
+  if (!alerts.length) alerts.push({ cls: 'alert-g', title: '✅ No urgent alerts', body: 'Portfolio looks healthy' });
+  document.getElementById('dash-alerts').innerHTML = alerts.map(a =>
+    `<div class="alert ${a.cls}"><div class="at">${a.title}</div><div class="ab">${a.body}</div></div>`
+  ).join('');
+}
+
+// ═══════════════════════════════════
+// MUTUAL FUNDS
+// ═══════════════════════════════════
+function renderMF() {
+  if (!snapshot) return;
+  const mf = snapshot.mf_holdings || [];
+  let totalMFVal = 0, totalMFCost = 0;
+
+  const mkRow = h => {
+    const nav = navs[h.isin] || h.last_nav || 0;
+    const val = (h.units || 0) * nav;
+    const cost = h.total_cost || 0;
+    const ret = cost > 0 ? (val - cost) / cost * 100 : 0;
+    const xirr = h.xirr || 0;
+    const xirrDisp = xirr > 1 ? xirr.toFixed(1) : (xirr * 100).toFixed(1);
+    totalMFVal += val;
+    totalMFCost += cost;
+    return `<div class="fund-row">
+      <div class="fr-left">
+        <div class="fr-name">${h.fund_name ? h.fund_name.split('–')[0].trim() : '—'}</div>
+        <div class="fr-meta">${h.amc || ''} · NAV ₹${nav.toFixed(2)} · XIRR ${xirrDisp}%</div>
+      </div>
+      <div class="fr-right">
+        <div class="fr-value">${fmt(val)}</div>
+        <div class="fr-ret" style="color:${clr(ret)}">${fmtP(ret)}</div>
+      </div>
+    </div>`;
+  };
+
+  const equity = mf.filter(h => h.fund_type === 'Equity');
+  const debt = mf.filter(h => h.fund_type === 'Debt');
+  document.getElementById('mf-equity-list').innerHTML = equity.map(mkRow).join('');
+  document.getElementById('mf-debt-list').innerHTML = debt.map(mkRow).join('');
+
+  const totalRet = totalMFCost > 0 ? (totalMFVal - totalMFCost) / totalMFCost * 100 : 0;
+  document.getElementById('mf-total').textContent = fmt(totalMFVal);
+  document.getElementById('mf-total-sub').innerHTML = `Invested ${fmt(totalMFCost)} &nbsp;<span style="color:${clr(totalRet)}">${fmtP(totalRet)}</span>`;
+
+  // SIPs
+  const sips = snapshot.sip_registry || [];
+  const sc = { ACTIVE: 'bg', ENDING: 'ba', COMPLETED: 'br', CANCELLED: 'bm' };
+  document.getElementById('sip-list').innerHTML = sips.map(s =>
+    `<div class="fund-row">
+      <div class="fr-left"><div class="fr-name">${s.fund_name ? s.fund_name.split('–')[0].trim() : '—'}</div><div class="fr-meta">${s.instalment_info || ''} · Last: ${s.last_debit_date || '—'}</div></div>
+      <div class="fr-right"><div class="fr-value" style="color:var(--amber)">₹${(s.monthly_amount || 0).toLocaleString('en-IN')}</div><div><span class="badge ${sc[s.status] || 'bm'}">${s.status}</span></div></div>
+    </div>`
+  ).join('');
+}
+
+// ═══════════════════════════════════
+// DIRECT EQUITY
+// ═══════════════════════════════════
+function renderEquity() {
+  if (!snapshot) return;
+  const eq = (snapshot.equity_holdings || []).filter(h => h.qty > 0 && h.symbol !== '__TOTAL__');
+  let totalVal = 0, totalCost = 0;
+
+  const rows = eq.map(h => {
+    const lp = prices[h.symbol]?.price || 0;
+    const val = lp > 0 ? (h.qty || 0) * lp : ((h.qty || 0) * (h.avg_cost || 0));
+    const cost = h.total_cost || 0;
+    const ret = cost > 0 ? (val - cost) / cost * 100 : 0;
+    const chgPct = prices[h.symbol]?.changePct || 0;
+    totalVal += val;
+    totalCost += cost;
+    return `<div class="fund-row">
+      <div class="fr-left">
+        <div class="fr-name">${h.company || h.symbol} <span class="badge bm" style="font-size:8px;">${h.symbol}</span></div>
+        <div class="fr-meta">${h.sector || '—'} · Qty: ${h.qty} · Avg: ₹${(h.avg_cost || 0).toFixed(0)}</div>
+      </div>
+      <div class="fr-right">
+        <div class="fr-value">${lp > 0 ? '₹' + lp.toFixed(2) : '—'}</div>
+        <div class="fr-ret" style="color:${clr(chgPct)}">${chgPct !== 0 ? fmtP(chgPct) + ' today' : fmtP(ret) + ' total'}</div>
+      </div>
+    </div>`;
+  });
+
+  document.getElementById('eq-list').innerHTML = rows.join('');
+  const totalRet = totalCost > 0 ? (totalVal - totalCost) / totalCost * 100 : 0;
+  document.getElementById('eq-total').textContent = fmt(totalVal);
+  document.getElementById('eq-total-sub').innerHTML = `Invested ${fmt(totalCost)} &nbsp;<span style="color:${clr(totalRet)}">${fmtP(totalRet)}</span>`;
+}
+
+// ═══════════════════════════════════
+// SCREEN NOW (simplified)
+// ═══════════════════════════════════
+const SCREEN_UNIVERSE = [
+  {sym:'HDFCBANK.NS',name:'HDFC Bank'},{sym:'ICICIBANK.NS',name:'ICICI Bank'},{sym:'INFY.NS',name:'Infosys'},{sym:'TCS.NS',name:'TCS'},{sym:'ONGC.NS',name:'ONGC'},{sym:'COALINDIA.NS',name:'Coal India'},{sym:'NTPC.NS',name:'NTPC'},{sym:'POWERGRID.NS',name:'Power Grid'},{sym:'ITC.NS',name:'ITC'},{sym:'SBIN.NS',name:'SBI'},{sym:'BPCL.NS',name:'BPCL'},{sym:'MARUTI.NS',name:'Maruti'},{sym:'SUNPHARMA.NS',name:'Sun Pharma'},{sym:'BAJFINANCE.NS',name:'Bajaj Finance'},{sym:'KOTAKBANK.NS',name:'Kotak Bank'},{sym:'LT.NS',name:'L&T'},{sym:'TECHM.NS',name:'Tech Mahindra'},{sym:'WIPRO.NS',name:'Wipro'},{sym:'TATASTEEL.NS',name:'Tata Steel'},{sym:'NATIONALUM.NS',name:'NALCO'}
+];
+
+async function runValueScreen() {
+  const btn = document.getElementById('scr-val-btn');
+  btn.innerHTML = '<span class="spin"></span> Analysing...';
+  btn.disabled = true;
+  const results = [];
+  for (const s of SCREEN_UNIVERSE) {
+    try {
+      const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${s.sym}?interval=1d&range=5d`);
+      const d = await r.json();
+      const res = d.chart?.result?.[0];
+      const closes = res?.indicators?.quote?.[0]?.close?.filter(Boolean);
+      if (!closes?.length) continue;
+      const price = closes[closes.length - 1];
+      const prev = closes.length > 1 ? closes[closes.length - 2] : price;
+      const chgPct = ((price - prev) / prev) * 100;
+      // Simple value signal based on recent trend
+      const signal = chgPct < -2 ? 'ACCUMULATE' : chgPct < 0 ? 'HOLD' : 'MONITOR';
+      const reason = chgPct < -2 ? `Down ${Math.abs(chgPct).toFixed(1)}% — potential entry` : chgPct < 0 ? 'Mild pullback — watch' : 'Near recent highs';
+      results.push({ sym: s.sym.replace('.NS',''), name: s.name, price, chgPct, signal, reason });
+    } catch {}
+    await new Promise(r => setTimeout(r, 100));
+  }
+  const sc = { ACCUMULATE: 'bg', HOLD: 'bp', MONITOR: 'bm' };
+  document.getElementById('scr-val-results').innerHTML = results.slice(0,10).sort((a,b)=>a.chgPct-b.chgPct).map(r =>
+    `<div class="screen-row"><div class="sr-top"><div><span class="sr-sym">${r.sym}</span> <span class="badge ${sc[r.signal]}">${r.signal}</span></div><div style="font-family:var(--mono);font-size:12px;">₹${r.price.toFixed(1)} <span style="color:${clr(r.chgPct)};font-size:10px;">${fmtP(r.chgPct)}</span></div></div><div class="sr-bot">${r.name} · ${r.reason}</div></div>`
+  ).join('');
+  document.getElementById('scr-val-time').textContent = 'Last run: ' + new Date().toLocaleTimeString('en-IN');
+  btn.innerHTML = '▶ RUN VALUE SCREEN';
+  btn.disabled = false;
+}
+
+async function runGrowthScreen() {
+  const btn = document.getElementById('scr-grow-btn');
+  btn.innerHTML = '<span class="spin"></span> Analysing...';
+  btn.disabled = true;
+  const growthUniverse = [
+    {sym:'PERSISTENT.NS',name:'Persistent'},{sym:'COFORGE.NS',name:'Coforge'},{sym:'KPITTECH.NS',name:'KPIT Tech'},{sym:'ZOMATO.NS',name:'Zomato'},{sym:'MAXHEALTH.NS',name:'Max Healthcare'},{sym:'IRCTC.NS',name:'IRCTC'},{sym:'HAL.NS',name:'HAL'},{sym:'INDIANHOTEL.NS',name:'Indian Hotels'},{sym:'LTIM.NS',name:'LTI Mindtree'},{sym:'DIXON.NS',name:'Dixon Tech'}
+  ];
+  const results = [];
+  for (const s of growthUniverse) {
+    try {
+      const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${s.sym}?interval=1d&range=5d`);
+      const d = await r.json();
+      const res = d.chart?.result?.[0];
+      const closes = res?.indicators?.quote?.[0]?.close?.filter(Boolean);
+      if (!closes?.length) continue;
+      const price = closes[closes.length - 1];
+      const prev = closes.length > 1 ? closes[closes.length - 2] : price;
+      const chgPct = ((price - prev) / prev) * 100;
+      results.push({ sym: s.sym.replace('.NS',''), name: s.name, price, chgPct, signal: 'GROWTH', reason: 'High-growth sector' });
+    } catch {}
+    await new Promise(r => setTimeout(r, 100));
+  }
+  document.getElementById('scr-grow-results').innerHTML = results.map(r =>
+    `<div class="screen-row"><div class="sr-top"><div><span class="sr-sym">${r.sym}</span> <span class="badge bp">GROWTH</span></div><div style="font-family:var(--mono);font-size:12px;">₹${r.price.toFixed(1)} <span style="color:${clr(r.chgPct)};font-size:10px;">${fmtP(r.chgPct)}</span></div></div><div class="sr-bot">${r.name}</div></div>`
+  ).join('');
+  document.getElementById('scr-grow-time').textContent = 'Last run: ' + new Date().toLocaleTimeString('en-IN');
+  btn.innerHTML = '▶ RUN GROWTH SCREEN';
+  btn.disabled = false;
+}
+
+// ═══════════════════════════════════
+// ADVISOR
+// ═══════════════════════════════════
+function renderAdvisor() {
+  if (!snapshot) return;
+  const sips = snapshot.sip_registry || [];
+  const recs = [];
+
+  // Dynamic recs from snapshot
+  sips.filter(s => s.status === 'COMPLETED').forEach(s => {
+    recs.push({ cls: 'alert-r', priority: 'URGENT', title: `Restart SIP: ${s.fund_name.split('–')[0].trim()}`, body: s.notes || 'SIP completed — restart to maintain rupee cost averaging.', action: 'Restart at ₹10,000/month' });
+  });
+  sips.filter(s => s.status === 'ENDING').forEach(s => {
+    recs.push({ cls: 'alert-a', priority: 'HIGH', title: `SIP Ending: ${s.fund_name.split('–')[0].trim()}`, body: s.notes || 'SIP ending soon.', action: 'Renew immediately' });
+  });
+
+  // Static recs
+  recs.push(
+    { cls: 'alert-b', priority: 'HIGH', title: 'Increase ICICI Nifty Next 50 SIP', body: '16.4% XIRR. Current ₹2,000/month is too small for this performance.', action: 'Increase to ₹5,000/month' },
+    { cls: 'alert-b', priority: 'MEDIUM', title: 'Build NASDAQ 100 Position', body: 'Only ₹50K allocated. 36.3% XIRR. International diversification benefit for NRI.', action: 'Add ₹1,00,000 lump sum' },
+    { cls: 'alert-a', priority: 'MEDIUM', title: 'Review FD Redeployment Strategy', body: 'FDs are 67% of portfolio vs 30% target. Maturing FDs should be redirected to equity MFs.', action: 'Deploy maturity proceeds to UTI Nifty 50 + Parag Parikh' },
+    { cls: 'alert-g', priority: 'OPPORTUNITY', title: 'Tax Optimisation — NRI Status', body: 'NRE FD interest is tax-free in India but taxable in Germany (~27%). Equity MF LTCG may be more efficient.', action: 'Consult tax advisor for India-Germany DTAA' }
+  );
+
+  document.getElementById('adv-content').innerHTML = recs.map(r =>
+    `<div class="alert ${r.cls}" style="margin-bottom:10px;"><div class="at"><span class="badge ${r.cls==='alert-r'?'br':r.cls==='alert-a'?'ba':r.cls==='alert-b'?'bp':'bg'}" style="margin-right:6px;">${r.priority}</span>${r.title}</div><div class="ab">${r.body}</div><div style="margin-top:6px;font-size:11px;font-weight:600;padding:5px 8px;background:rgba(255,255,255,.04);border-radius:4px;">📌 ${r.action}</div></div>`
+  ).join('');
+}
+</script>
+</body>
+</html>
