@@ -46,6 +46,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 #nse-badge{font-size:9px;padding:2px 7px;border-radius:99px;background:#052e16;color:var(--green);border:1px solid #166534;}
 #refresh-btn{background:var(--amber);color:#000;border:none;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;}
 
+/* ── STALE DATA BANNER ── */
+#stale-banner{background:#3b2500;border-bottom:1px solid #92400e;color:#fbbf24;font-size:11px;padding:6px 12px;text-align:center;flex-shrink:0;}
+
 /* ── INDEX STRIP ── */
 #strip{background:#080f1d;border-bottom:1px solid var(--border);overflow-x:auto;white-space:nowrap;padding:6px 10px;scrollbar-width:none;flex-shrink:0;}
 #strip::-webkit-scrollbar{display:none;}
@@ -77,13 +80,14 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .mc-sub{font-size:10px;color:var(--muted);margin-top:2px;}
 
 /* ── FUND / STOCK ROWS ── */
-.fund-row{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;}
+.fund-row{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start;}
 .fr-left{flex:1;}
 .fr-name{font-size:12px;font-weight:600;margin-bottom:2px;}
 .fr-meta{font-size:10px;color:var(--muted);}
-.fr-right{text-align:right;}
+.fr-right{text-align:right;flex-shrink:0;margin-left:8px;}
 .fr-value{font-family:var(--mono);font-size:13px;font-weight:700;}
 .fr-ret{font-size:10px;font-weight:600;}
+.fr-gain{font-size:10px;margin-top:2px;}
 .badge{display:inline-block;padding:1px 6px;border-radius:99px;font-size:9px;font-weight:700;}
 .bg{background:#052e16;color:var(--green);}
 .br{background:#1f0909;color:var(--red);}
@@ -187,6 +191,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
     </div>
   </div>
 
+  <div id="stale-banner" class="hidden"></div>
+
   <div id="strip"><div class="idx-chip"><span class="idx-name">Loading indices...</span></div></div>
 
   <div id="content">
@@ -225,16 +231,16 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
     <div class="tab" id="tab-screen">
       <div class="card" style="border-left:3px solid var(--amber);">
         <div class="card-title">Value Stock Screener</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Screens large & mid cap NSE stocks. Tap to run.</div>
-        <button class="run-btn" id="scr-val-btn" onclick="runValueScreen()">▶ RUN VALUE SCREEN</button>
-        <div id="scr-val-time" style="font-size:10px;color:var(--muted);text-align:center;"></div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">PE &lt; 20 · PB &lt; 3 · Div yield &gt; 1% — pre-computed every 30 min.</div>
+        <button class="run-btn" id="scr-val-btn" onclick="runValueScreen()">↻ REFRESH DATA</button>
+        <div id="scr-val-time" style="font-size:10px;color:var(--muted);text-align:center;margin-bottom:6px;"></div>
         <div id="scr-val-results"></div>
       </div>
       <div class="card" style="border-left:3px solid var(--purple);margin-top:10px;">
         <div class="card-title">Growth Stock Screener</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Screens for high revenue & earnings growth.</div>
-        <button class="run-btn" id="scr-grow-btn" onclick="runGrowthScreen()">▶ RUN GROWTH SCREEN</button>
-        <div id="scr-grow-time" style="font-size:10px;color:var(--muted);text-align:center;"></div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Revenue growth &gt; 15% · EPS growth &gt; 15% — pre-computed every 30 min.</div>
+        <button class="run-btn" id="scr-grow-btn" onclick="runGrowthScreen()">↻ REFRESH DATA</button>
+        <div id="scr-grow-time" style="font-size:10px;color:var(--muted);text-align:center;margin-bottom:6px;"></div>
         <div id="scr-grow-results"></div>
       </div>
     </div>
@@ -260,9 +266,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 // ═══════════════════════════════════
 const REPO = 'Rahul4Finance/portfolio-data';
 const SNAPSHOT_FILE = 'portfolio_snapshot.json';
+const LIVE_DATA_FILE = 'live_data.json';
 let snapshot = null;
-let prices = {}; // {yahoo_symbol: {price, changePct}}
-let navs = {};   // {mf_code: nav}
+let liveData = null;
+let prices = {};  // {SYMBOL: {price, changePct, dayChangeAbs, prevClose}}
+let navs = {};    // {isin: nav}
 let allocChart = null, retChart = null;
 let pinEntry = '';
 
@@ -353,19 +361,27 @@ function showTab(name, el) {
 }
 
 // ═══════════════════════════════════
-// DATA FETCHING
+// DATA FETCHING — GitHub only
 // ═══════════════════════════════════
-async function fetchSnapshot() {
+async function fetchGitHubFile(filename) {
   const token = localStorage.getItem('pa_token');
   try {
-    const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${SNAPSHOT_FILE}`, {
+    const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${filename}`, {
       headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' }
     });
-    if (!r.ok) { console.error('Snapshot fetch failed:', r.status); return null; }
+    if (!r.ok) { console.error(`Fetch ${filename} failed:`, r.status); return null; }
     const data = await r.json();
     const content = atob(data.content.replace(/\n/g, ''));
     return JSON.parse(content);
-  } catch (e) { console.error('Snapshot error:', e); return null; }
+  } catch (e) { console.error(`Error fetching ${filename}:`, e); return null; }
+}
+
+async function fetchSnapshot() {
+  return fetchGitHubFile(SNAPSHOT_FILE);
+}
+
+async function fetchLiveData() {
+  return fetchGitHubFile(LIVE_DATA_FILE);
 }
 
 async function fetchMFNavs(holdings) {
@@ -382,39 +398,21 @@ async function fetchMFNavs(holdings) {
   return results;
 }
 
-async function fetchStockPrice(symbol) {
-  const yahooSym = symbol.includes('.') ? symbol : symbol + '.NS';
-  try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSym}?interval=1d&range=5d`;
-    const r = await fetch(url);
-    if (!r.ok) return null;
-    const d = await r.json();
-    const res = d.chart?.result?.[0];
-    if (!res) return null;
-    const closes = res.indicators?.quote?.[0]?.close?.filter(Boolean);
-    if (!closes || closes.length < 2) return null;
-    const last = closes[closes.length - 1];
-    const prev = closes[closes.length - 2];
-    return { price: last, changePct: ((last - prev) / prev) * 100 };
-  } catch { return null; }
-}
-
-async function fetchIndices() {
-  const idxMap = { '^NSEI': 'NIFTY 50', '^NSEBANK': 'BANK', '^CNXIT': 'IT', '^NSMIDCP': 'MIDCAP' };
-  const chips = [];
-  for (const [sym, label] of Object.entries(idxMap)) {
-    try {
-      const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=2d`);
-      const d = await r.json();
-      const res = d.chart?.result?.[0];
-      const closes = res?.indicators?.quote?.[0]?.close?.filter(Boolean);
-      if (!closes || closes.length < 2) continue;
-      const last = closes[closes.length - 1], prev = closes[closes.length - 2];
-      const chg = ((last - prev) / prev) * 100;
-      chips.push({ label, val: last, chg });
-    } catch {}
+// ═══════════════════════════════════
+// STALE DATA BANNER
+// ═══════════════════════════════════
+function checkStaleBanner(ld) {
+  const banner = document.getElementById('stale-banner');
+  if (!ld?.generated_at) { banner.classList.add('hidden'); return; }
+  const genTime = new Date(ld.generated_at);
+  const ageMs = Date.now() - genTime.getTime();
+  if (ageMs > 2 * 60 * 60 * 1000) {
+    const timeStr = genTime.toLocaleString('en-IN', {day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'});
+    banner.textContent = `⚠ Market data may be stale — last updated ${timeStr}`;
+    banner.classList.remove('hidden');
+  } else {
+    banner.classList.add('hidden');
   }
-  return chips;
 }
 
 // ═══════════════════════════════════
@@ -425,7 +423,7 @@ async function refreshAll() {
   btn.textContent = '⟳';
   btn.disabled = true;
 
-  // Load snapshot
+  // Load snapshot (portfolio positions)
   const cached = localStorage.getItem('pa_snapshot');
   if (cached) snapshot = JSON.parse(cached);
   const fresh = await fetchSnapshot();
@@ -433,32 +431,57 @@ async function refreshAll() {
 
   if (!snapshot) { btn.textContent = '↻ REFRESH'; btn.disabled = false; return; }
 
-  const syncTime = snapshot.exported_at ? new Date(snapshot.exported_at).toLocaleString('en-IN', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '—';
+  const syncTime = snapshot.exported_at
+    ? new Date(snapshot.exported_at).toLocaleString('en-IN', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})
+    : '—';
   document.getElementById('sync-time').textContent = 'Synced: ' + syncTime;
 
-  // Fetch live data in parallel
   const mfHoldings = snapshot.mf_holdings || [];
   const eqHoldings = (snapshot.equity_holdings || []).filter(h => h.qty > 0 && h.symbol !== '__TOTAL__');
 
-  const [navMap, idxData] = await Promise.all([
+  // Fetch MF NAVs and live market data in parallel
+  const [navMap, ld] = await Promise.all([
     fetchMFNavs(mfHoldings),
-    fetchIndices()
+    fetchLiveData()
   ]);
   navs = navMap;
 
-  // Fetch stock prices
-  const pricePromises = eqHoldings.map(async h => {
-    const sym = h.yahoo_symbol || h.symbol + '.NS';
-    const p = await fetchStockPrice(sym);
-    if (p) prices[h.symbol] = p;
-  });
-  await Promise.allSettled(pricePromises);
+  // Build prices map from live_data.json
+  if (ld) {
+    liveData = ld;
+    prices = {};
+    for (const [sym, d] of Object.entries(ld.stocks || {})) {
+      // sym is like "BPCL.NS"; key prices by the base symbol without .NS
+      const base = sym.replace(/\.NS$/i, '').replace(/\^/, '');
+      prices[base] = {
+        price:         d.price,
+        changePct:     d.day_change_pct,
+        dayChangeAbs:  d.day_change_abs,
+        prevClose:     d.prev_close,
+      };
+      // Also key by full symbol for direct lookups
+      prices[sym] = prices[base];
+    }
+    checkStaleBanner(ld);
 
-  renderIndexStrip(idxData);
+    // Render index strip from live data
+    const idxChips = (ld.indices || []).map(idx => ({
+      label: idx.label,
+      val:   idx.value,
+      chg:   idx.day_change_pct,
+    }));
+    if (idxChips.length) renderIndexStrip(idxChips);
+  }
+
   renderDashboard();
   renderMF();
   renderEquity();
   renderAdvisor();
+
+  // Pre-load screener results into the screen tab if data is fresh
+  if (liveData) {
+    renderScreenerResults();
+  }
 
   btn.textContent = '↻ REFRESH';
   btn.disabled = false;
@@ -496,10 +519,11 @@ function renderDashboard() {
     else { dmfVal += val; dmfCost += cost; }
   });
 
-  // Equity values
+  // Equity values using live prices
   let eqVal = 0, eqCost = 0;
   eq.forEach(h => {
-    const lp = prices[h.symbol]?.price || 0;
+    const sym = (h.yahoo_symbol || h.symbol + '.NS').replace(/\.NS$/i, '');
+    const lp = prices[sym]?.price || 0;
     const val = lp > 0 ? (h.qty || 0) * lp : (h.current_value || (h.qty || 0) * (h.avg_cost || 0));
     eqVal += val;
     eqCost += h.total_cost || 0;
@@ -624,21 +648,35 @@ function renderEquity() {
   let totalVal = 0, totalCost = 0;
 
   const rows = eq.map(h => {
-    const lp = prices[h.symbol]?.price || 0;
-    const val = lp > 0 ? (h.qty || 0) * lp : ((h.qty || 0) * (h.avg_cost || 0));
-    const cost = h.total_cost || 0;
-    const ret = cost > 0 ? (val - cost) / cost * 100 : 0;
-    const chgPct = prices[h.symbol]?.changePct || 0;
+    // Resolve live price — try base symbol, then with .NS suffix
+    const base = (h.yahoo_symbol || h.symbol + '.NS').replace(/\.NS$/i, '');
+    const stockInfo = prices[base] || prices[h.symbol] || null;
+    const lp = stockInfo?.price || 0;
+
+    const qty = h.qty || 0;
+    const avgCost = h.avg_cost || 0;
+    const cost = h.total_cost || (qty * avgCost);
+    const val = lp > 0 ? qty * lp : (h.current_value || cost);
+    const gainAbs = val - cost;
+    const gainPct = cost > 0 ? (gainAbs / cost) * 100 : 0;
+    const dayChgPct = stockInfo?.changePct ?? 0;
+    // Day P&L in rupees on this holding
+    const dayGainAbs = stockInfo ? (stockInfo.price - stockInfo.prevClose) * qty : 0;
+
     totalVal += val;
     totalCost += cost;
+
+    const gainSign = gainAbs >= 0 ? '+' : '';
+    const daySign  = dayGainAbs >= 0 ? '+' : '';
     return `<div class="fund-row">
       <div class="fr-left">
         <div class="fr-name">${h.company || h.symbol} <span class="badge bm" style="font-size:8px;">${h.symbol}</span></div>
-        <div class="fr-meta">${h.sector || '—'} · Qty: ${h.qty} · Avg: ₹${(h.avg_cost || 0).toFixed(0)}</div>
+        <div class="fr-meta">${h.sector || '—'} · Qty: ${qty} · Avg: ₹${avgCost.toFixed(0)}</div>
       </div>
       <div class="fr-right">
         <div class="fr-value">${lp > 0 ? '₹' + lp.toFixed(2) : '—'}</div>
-        <div class="fr-ret" style="color:${clr(chgPct)}">${chgPct !== 0 ? fmtP(chgPct) + ' today' : fmtP(ret) + ' total'}</div>
+        <div class="fr-ret" style="color:${clr(dayChgPct)}">${dayChgPct !== 0 ? fmtP(dayChgPct) + ' today' : '—'}</div>
+        <div class="fr-gain" style="color:${clr(gainAbs)}">${gainSign}${fmt(gainAbs)} (${gainSign}${gainPct.toFixed(1)}%)</div>
       </div>
     </div>`;
   });
@@ -650,70 +688,109 @@ function renderEquity() {
 }
 
 // ═══════════════════════════════════
-// SCREEN NOW (simplified)
+// SCREENERS — read from live_data.json
 // ═══════════════════════════════════
-const SCREEN_UNIVERSE = [
-  {sym:'HDFCBANK.NS',name:'HDFC Bank'},{sym:'ICICIBANK.NS',name:'ICICI Bank'},{sym:'INFY.NS',name:'Infosys'},{sym:'TCS.NS',name:'TCS'},{sym:'ONGC.NS',name:'ONGC'},{sym:'COALINDIA.NS',name:'Coal India'},{sym:'NTPC.NS',name:'NTPC'},{sym:'POWERGRID.NS',name:'Power Grid'},{sym:'ITC.NS',name:'ITC'},{sym:'SBIN.NS',name:'SBI'},{sym:'BPCL.NS',name:'BPCL'},{sym:'MARUTI.NS',name:'Maruti'},{sym:'SUNPHARMA.NS',name:'Sun Pharma'},{sym:'BAJFINANCE.NS',name:'Bajaj Finance'},{sym:'KOTAKBANK.NS',name:'Kotak Bank'},{sym:'LT.NS',name:'L&T'},{sym:'TECHM.NS',name:'Tech Mahindra'},{sym:'WIPRO.NS',name:'Wipro'},{sym:'TATASTEEL.NS',name:'Tata Steel'},{sym:'NATIONALUM.NS',name:'NALCO'}
-];
+function renderScreenerResults() {
+  if (!liveData) return;
+  const genAt = liveData.generated_at;
+  const timeStr = genAt
+    ? new Date(genAt).toLocaleString('en-IN', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})
+    : '—';
+
+  // Value screener
+  const valResults = liveData.value_screen || [];
+  document.getElementById('scr-val-time').textContent = `Data as of: ${timeStr}`;
+  if (valResults.length) {
+    document.getElementById('scr-val-results').innerHTML = valResults.map(r =>
+      `<div class="screen-row">
+        <div class="sr-top">
+          <div><span class="sr-sym">${r.ticker}</span> <span class="badge bg">VALUE</span></div>
+          <div style="font-family:var(--mono);font-size:12px;">${r.price ? '₹' + r.price.toFixed(1) : '—'}</div>
+        </div>
+        <div class="sr-bot">${r.name} · PE ${r.pe} · PB ${r.pb} · Div ${r.div_yield_pct}% · 52w ${r.week52_pos != null ? r.week52_pos + '%' : '—'}</div>
+      </div>`
+    ).join('');
+  }
+
+  // Growth screener
+  const growResults = liveData.growth_screen || [];
+  document.getElementById('scr-grow-time').textContent = `Data as of: ${timeStr}`;
+  if (growResults.length) {
+    document.getElementById('scr-grow-results').innerHTML = growResults.map(r =>
+      `<div class="screen-row">
+        <div class="sr-top">
+          <div><span class="sr-sym">${r.ticker}</span> <span class="badge bp">GROWTH</span></div>
+          <div style="font-family:var(--mono);font-size:12px;">${r.price ? '₹' + r.price.toFixed(1) : '—'}</div>
+        </div>
+        <div class="sr-bot">${r.name} · Rev +${r.rev_growth_pct}% · EPS +${r.eps_growth_pct}%${r.pe ? ' · PE ' + r.pe : ''} · ${r.sector}</div>
+      </div>`
+    ).join('');
+  }
+}
 
 async function runValueScreen() {
   const btn = document.getElementById('scr-val-btn');
-  btn.innerHTML = '<span class="spin"></span> Analysing...';
+  btn.innerHTML = '<span class="spin"></span> Loading...';
   btn.disabled = true;
-  const results = [];
-  for (const s of SCREEN_UNIVERSE) {
-    try {
-      const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${s.sym}?interval=1d&range=5d`);
-      const d = await r.json();
-      const res = d.chart?.result?.[0];
-      const closes = res?.indicators?.quote?.[0]?.close?.filter(Boolean);
-      if (!closes?.length) continue;
-      const price = closes[closes.length - 1];
-      const prev = closes.length > 1 ? closes[closes.length - 2] : price;
-      const chgPct = ((price - prev) / prev) * 100;
-      // Simple value signal based on recent trend
-      const signal = chgPct < -2 ? 'ACCUMULATE' : chgPct < 0 ? 'HOLD' : 'MONITOR';
-      const reason = chgPct < -2 ? `Down ${Math.abs(chgPct).toFixed(1)}% — potential entry` : chgPct < 0 ? 'Mild pullback — watch' : 'Near recent highs';
-      results.push({ sym: s.sym.replace('.NS',''), name: s.name, price, chgPct, signal, reason });
-    } catch {}
-    await new Promise(r => setTimeout(r, 100));
+
+  const ld = await fetchLiveData();
+  if (ld) { liveData = ld; checkStaleBanner(ld); }
+
+  const results = liveData?.value_screen || [];
+  const genAt = liveData?.generated_at;
+  const timeStr = genAt
+    ? new Date(genAt).toLocaleString('en-IN', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})
+    : '—';
+
+  document.getElementById('scr-val-time').textContent = `Data as of: ${timeStr}`;
+  if (!results.length) {
+    document.getElementById('scr-val-results').innerHTML =
+      '<div style="color:var(--muted);font-size:12px;text-align:center;padding:16px;">No screener data yet — GitHub Actions will populate this within 30 min.</div>';
+  } else {
+    document.getElementById('scr-val-results').innerHTML = results.map(r =>
+      `<div class="screen-row">
+        <div class="sr-top">
+          <div><span class="sr-sym">${r.ticker}</span> <span class="badge bg">VALUE</span></div>
+          <div style="font-family:var(--mono);font-size:12px;">${r.price ? '₹' + r.price.toFixed(1) : '—'}</div>
+        </div>
+        <div class="sr-bot">${r.name} · PE ${r.pe} · PB ${r.pb} · Div ${r.div_yield_pct}% · 52w ${r.week52_pos != null ? r.week52_pos + '%' : '—'}</div>
+      </div>`
+    ).join('');
   }
-  const sc = { ACCUMULATE: 'bg', HOLD: 'bp', MONITOR: 'bm' };
-  document.getElementById('scr-val-results').innerHTML = results.slice(0,10).sort((a,b)=>a.chgPct-b.chgPct).map(r =>
-    `<div class="screen-row"><div class="sr-top"><div><span class="sr-sym">${r.sym}</span> <span class="badge ${sc[r.signal]}">${r.signal}</span></div><div style="font-family:var(--mono);font-size:12px;">₹${r.price.toFixed(1)} <span style="color:${clr(r.chgPct)};font-size:10px;">${fmtP(r.chgPct)}</span></div></div><div class="sr-bot">${r.name} · ${r.reason}</div></div>`
-  ).join('');
-  document.getElementById('scr-val-time').textContent = 'Last run: ' + new Date().toLocaleTimeString('en-IN');
-  btn.innerHTML = '▶ RUN VALUE SCREEN';
+  btn.innerHTML = '↻ REFRESH DATA';
   btn.disabled = false;
 }
 
 async function runGrowthScreen() {
   const btn = document.getElementById('scr-grow-btn');
-  btn.innerHTML = '<span class="spin"></span> Analysing...';
+  btn.innerHTML = '<span class="spin"></span> Loading...';
   btn.disabled = true;
-  const growthUniverse = [
-    {sym:'PERSISTENT.NS',name:'Persistent'},{sym:'COFORGE.NS',name:'Coforge'},{sym:'KPITTECH.NS',name:'KPIT Tech'},{sym:'ZOMATO.NS',name:'Zomato'},{sym:'MAXHEALTH.NS',name:'Max Healthcare'},{sym:'IRCTC.NS',name:'IRCTC'},{sym:'HAL.NS',name:'HAL'},{sym:'INDIANHOTEL.NS',name:'Indian Hotels'},{sym:'LTIM.NS',name:'LTI Mindtree'},{sym:'DIXON.NS',name:'Dixon Tech'}
-  ];
-  const results = [];
-  for (const s of growthUniverse) {
-    try {
-      const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${s.sym}?interval=1d&range=5d`);
-      const d = await r.json();
-      const res = d.chart?.result?.[0];
-      const closes = res?.indicators?.quote?.[0]?.close?.filter(Boolean);
-      if (!closes?.length) continue;
-      const price = closes[closes.length - 1];
-      const prev = closes.length > 1 ? closes[closes.length - 2] : price;
-      const chgPct = ((price - prev) / prev) * 100;
-      results.push({ sym: s.sym.replace('.NS',''), name: s.name, price, chgPct, signal: 'GROWTH', reason: 'High-growth sector' });
-    } catch {}
-    await new Promise(r => setTimeout(r, 100));
+
+  const ld = await fetchLiveData();
+  if (ld) { liveData = ld; checkStaleBanner(ld); }
+
+  const results = liveData?.growth_screen || [];
+  const genAt = liveData?.generated_at;
+  const timeStr = genAt
+    ? new Date(genAt).toLocaleString('en-IN', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})
+    : '—';
+
+  document.getElementById('scr-grow-time').textContent = `Data as of: ${timeStr}`;
+  if (!results.length) {
+    document.getElementById('scr-grow-results').innerHTML =
+      '<div style="color:var(--muted);font-size:12px;text-align:center;padding:16px;">No screener data yet — GitHub Actions will populate this within 30 min.</div>';
+  } else {
+    document.getElementById('scr-grow-results').innerHTML = results.map(r =>
+      `<div class="screen-row">
+        <div class="sr-top">
+          <div><span class="sr-sym">${r.ticker}</span> <span class="badge bp">GROWTH</span></div>
+          <div style="font-family:var(--mono);font-size:12px;">${r.price ? '₹' + r.price.toFixed(1) : '—'}</div>
+        </div>
+        <div class="sr-bot">${r.name} · Rev +${r.rev_growth_pct}% · EPS +${r.eps_growth_pct}%${r.pe ? ' · PE ' + r.pe : ''} · ${r.sector}</div>
+      </div>`
+    ).join('');
   }
-  document.getElementById('scr-grow-results').innerHTML = results.map(r =>
-    `<div class="screen-row"><div class="sr-top"><div><span class="sr-sym">${r.sym}</span> <span class="badge bp">GROWTH</span></div><div style="font-family:var(--mono);font-size:12px;">₹${r.price.toFixed(1)} <span style="color:${clr(r.chgPct)};font-size:10px;">${fmtP(r.chgPct)}</span></div></div><div class="sr-bot">${r.name}</div></div>`
-  ).join('');
-  document.getElementById('scr-grow-time').textContent = 'Last run: ' + new Date().toLocaleTimeString('en-IN');
-  btn.innerHTML = '▶ RUN GROWTH SCREEN';
+  btn.innerHTML = '↻ REFRESH DATA';
   btn.disabled = false;
 }
 
