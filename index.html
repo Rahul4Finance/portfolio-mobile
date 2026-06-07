@@ -197,9 +197,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
         <div class="mini-card"><div class="mc-label">Debt MF</div><div class="mc-val" id="d-dmf">₹—</div><div class="mc-sub" id="d-dmf-r">—</div></div>
         <div class="mini-card"><div class="mc-label">Direct Equity</div><div class="mc-val" id="d-eq">₹—</div><div class="mc-sub" id="d-eq-r">—</div></div>
         <div class="mini-card"><div class="mc-label">Monthly SIP</div><div class="mc-val" id="d-sip">₹—</div><div class="mc-sub" id="d-sip-r">—</div></div>
-      </div>
-      <div class="chart-wrap"><div class="chart-title">Allocation</div><canvas id="alloc-chart" height="180"></canvas></div>
-      <div class="chart-wrap"><div class="chart-title">Returns by Asset Class</div><canvas id="ret-chart" height="150"></canvas></div>
+      </div><div style="position:relative;height:180px;"><canvas id="alloc-chart"></canvas></div>
+   <div style="position:relative;height:150px;"><canvas id="ret-chart"></canvas></div>
       <div class="sec">Alerts</div>
       <div id="dash-alerts"><div style="color:var(--muted);font-size:12px;">Loading...</div></div>
     </div>
